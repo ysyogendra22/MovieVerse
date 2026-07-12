@@ -40,4 +40,6 @@ See [architecture_summary.md](architecture_summary.md) for how these fit togethe
   README's "Toolchain versions" section.
 - Movie data comes from a real network call to TVMaze (`https://api.tvmaze.com`) — no
   mock engine anymore. The app needs internet access to load anything.
-- No automated tests exist yet.
+- Unit tests exist for the mapper, repository (`shared/src/commonTest`), and Android
+  ViewModels (`androidApp/src/test`) — see [architecture_summary.md](architecture_summary.md)'s
+  "Testing" section. No iOS/Swift (XCTest) tests yet — see decisions.md #16.

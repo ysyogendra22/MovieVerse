@@ -175,3 +175,26 @@ architecture handling a second, parameterized request end to end. `MovieRoute.De
 now carries `movieId: Int` instead of the full `Movie` object, and `MovieDetailViewModel`
 takes the id via Koin's parameter-injection DSL (`viewModel { (id: Int) -> ... }`,
 `koinViewModel { parametersOf(movieId) }`).
+
+## 16. Test scope: Kotlin only (shared + androidApp), and no Timeout repository test
+
+Asked for "unit tests / repository tests / ViewModel tests." Scoped this to Kotlin:
+`shared/src/commonTest` (mapper, repository) and `androidApp/src/test` (ViewModels).
+**Deliberately did not** set up an iOS XCTest target — that needs a whole new
+`PBXNativeTarget` in `project.pbxproj` (test host config, a second target, scheme
+wiring), which is a materially riskier hand-edit than adding a file to an existing
+target (see instructions.md on validating `project.pbxproj` changes), and wasn't
+explicitly asked for. Flagging it here rather than silently skipping it — add it as a
+follow-up if iOS-side unit tests are wanted.
+
+Also **deliberately skipped** a dedicated test for `MovieError.Timeout`: reliably
+triggering Ktor's real `HttpTimeout` plugin in a unit test depends on how its internal
+timeout mechanism interacts with `kotlinx-coroutines-test`'s virtual time — genuinely
+uncertain without deeper verification, and a timing-dependent test that might flake is
+worse than no test for that one branch. The other four `MovieError` branches (success,
+empty, 404, 500, malformed body) are covered; `safeApiCall`'s catch order itself is
+still correct and code-reviewable even without a test forcing that specific branch.
+
+`ktor-client-mock` came back as a dependency for this (it was removed from production
+code in decision #11) — added back, but scoped strictly to `commonTest`, not
+`commonMain`, so it can't leak into the shipped app again.

@@ -100,6 +100,23 @@ type from Swift — see decisions.md for why.
 - **Images**: Coil 3 (`AsyncImage` composable) on Android; SwiftUI's built-in
   `AsyncImage` on iOS. No shared/multiplatform image-loading code.
 
+## Testing
+
+- **`shared/src/commonTest`**: `MovieMapperTest` (HTML-stripping, null fallbacks —
+  pure function, no mocking needed) and `MovieRepositoryImplTest` (exercises
+  `safeApiCall`'s exception→`MovieError` translation against a `ktor-client-mock`
+  `MockEngine` — success/empty/404/500/malformed-body; the `Timeout` branch is
+  deliberately not covered here, see decisions.md #16). `ktor-client-mock` is a
+  **test-only** dependency (`commonTest`) — production code has no mock engine.
+- **`androidApp/src/test`**: `MovieListViewModelTest`/`MovieDetailViewModelTest`
+  against `FakeMovieRepository` (a mutable in-memory test double, not a production
+  fallback — see coding_style.md), using `MainDispatcherRule` to make `viewModelScope`
+  runnable in a plain JVM test. Because these tests use `UnconfinedTestDispatcher`,
+  the fake repository's calls aren't truly async, so `uiState.value` is already the
+  final state (`Success`/`Error`/`Empty`) by the time `load()` returns — the tests
+  assert outcomes, not the transient `Loading` state.
+- **iOS**: no XCTest target yet — see decisions.md #16.
+
 ## What's deliberately not here
 
 - **Local storage / caching** — no Room, no SQLDelight. `MovieRepositoryImpl` is the

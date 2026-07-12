@@ -21,16 +21,17 @@ TVMaze (a free TV show API used as dummy data — see
 | 5 | Real (if not movie-specific) data source, no manual setup required | Done — TVMaze, keyless |
 | 6 | Error state (network unavailable, API error, timeout, empty/malformed response, unexpected exception), with retry | Done — see `MovieError` in `../.ai/glossary.md` |
 | 7 | Empty state (successful fetch, zero results) | Done |
+| 8 | Unit tests: mapper, repository, ViewModels | Done on Kotlin side (`shared`/`androidApp`) — see `../.ai/architecture_summary.md`'s "Testing" section |
 
 ## Requirements — not yet implemented
 
 | # | Requirement | Notes |
 |---|---|---|
-| 8 | Search / filter movies | Not started |
-| 9 | Offline caching of previously loaded movies | Deferred — see [`../.ai/decisions.md`](../.ai/decisions.md) #4 (Room skipped for now) |
-| 10 | Favoriting / watchlist | Not started |
-| 11 | Automated tests | Not started — see [`../.ai/prompts/generate_tests.md`](../.ai/prompts/generate_tests.md) |
-| 12 | A real movie catalog (vs. TVMaze's TV shows) | Needs a data source decision — see 01-Discovery.md |
+| 9 | Search / filter movies | Not started |
+| 10 | Offline caching of previously loaded movies | Deferred — see [`../.ai/decisions.md`](../.ai/decisions.md) #4 (Room skipped for now) |
+| 11 | Favoriting / watchlist | Not started |
+| 12 | iOS unit tests (XCTest) | Not started — see [`../.ai/decisions.md`](../.ai/decisions.md) #16 |
+| 13 | A real movie catalog (vs. TVMaze's TV shows) | Needs a data source decision — see 01-Discovery.md |
 
 ## Non-functional
 

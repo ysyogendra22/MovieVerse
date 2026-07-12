@@ -23,10 +23,10 @@ left is product-level, not architectural:
 
 - Search, favorites, offline cache, pagination — all real features, all deferred (see
   [03-Feature-List.md](03-Feature-List.md)'s backlog).
-- Automated tests are valuable but not a blocker for a first user-facing MVP; treat as
-  parallel-track work, not a gate — see
-  [`../.ai/prompts/generate_tests.md`](../.ai/prompts/generate_tests.md) for where to
-  start once there's bandwidth.
+- Full test coverage isn't a blocker for a first user-facing MVP — Kotlin-side unit
+  tests exist (mapper, repository, ViewModels; see
+  [`../.ai/architecture_summary.md`](../.ai/architecture_summary.md)'s "Testing"
+  section), but iOS/XCTest coverage is still open and shouldn't gate shipping.
 - Localized error messages — currently English-only, centralized in `shared` (see
   [`../.ai/decisions.md`](../.ai/decisions.md) #13). Fine for an initial release.
 

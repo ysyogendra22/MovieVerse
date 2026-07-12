@@ -21,6 +21,11 @@
   malformed/empty response, and unexpected exceptions are all distinguished
   (`MovieError` in `shared/domain/error`) and shown with a Retry action on both
   platforms.
+- **Unit tests (Kotlin)** — `MovieMapperTest`, `MovieRepositoryImplTest`
+  (`shared/src/commonTest`); `MovieListViewModelTest`, `MovieDetailViewModelTest`
+  (`androidApp/src/test`). See [`../.ai/architecture_summary.md`](../.ai/architecture_summary.md)'s
+  "Testing" section and [`../.ai/decisions.md`](../.ai/decisions.md) #16 for what's
+  deliberately not covered (iOS/XCTest, the `MovieError.Timeout` branch).
 
 ## Backlog (not started, no priority order implied)
 
@@ -31,7 +36,7 @@
   offline cache).
 - **Pagination** — TVMaze's `/shows` returns its full catalog in one response; a real
   movie API will likely need paging support added to `MovieApiClient`.
-- **Automated tests** — see [`../.ai/prompts/generate_tests.md`](../.ai/prompts/generate_tests.md).
+- **iOS unit tests (XCTest)** — see [`../.ai/decisions.md`](../.ai/decisions.md) #16.
 - **A real movie catalog** — TVMaze is a TV show API used as dummy data; swapping to an
   actual movie API is still open, see [01-Discovery.md](01-Discovery.md).
 

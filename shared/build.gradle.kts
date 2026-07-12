@@ -48,6 +48,10 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            // Test-only: production code has no mock engine (see NetworkModule.kt) —
+            // this exercises MovieRepositoryImpl's exception handling in isolation.
+            implementation(libs.ktor.client.mock)
         }
         androidMain.dependencies {
             // HttpClient() with no explicit engine in commonMain auto-detects
