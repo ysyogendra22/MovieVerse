@@ -37,7 +37,6 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
 
             implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.mock)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
 
@@ -51,10 +50,12 @@ kotlin {
             implementation(kotlin("test"))
         }
         androidMain.dependencies {
-            // Android-specific dependencies go here
+            // HttpClient() with no explicit engine in commonMain auto-detects
+            // whichever engine is on each platform's classpath.
+            implementation(libs.ktor.client.okhttp)
         }
         iosMain.dependencies {
-            // iOS-specific dependencies go here
+            implementation(libs.ktor.client.darwin)
         }
     }
 }

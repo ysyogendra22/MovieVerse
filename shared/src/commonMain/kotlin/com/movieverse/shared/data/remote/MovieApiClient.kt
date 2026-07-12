@@ -5,15 +5,16 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 
 /**
- * Talks to the movies backend. The [HttpClient] injected here defaults to a mock
- * engine (see [com.movieverse.shared.data.mock.mockMovieEngine]) so this starter
- * runs with no real API key. Point [baseUrl] at a real service (e.g. TMDB) and
- * swap the engine in `di/NetworkModule.kt` to go live.
+ * Talks to TVMaze (https://api.tvmaze.com) — a free, keyless TV show API used as
+ * dummy data. Exceptions are left to propagate as-is; translating them into
+ * [com.movieverse.shared.domain.error.MovieError] is MovieRepositoryImpl's job, not
+ * this class's — this stays a thin HTTP wrapper.
  */
 class MovieApiClient(
     private val httpClient: HttpClient,
-    private val baseUrl: String = "https://api.example.com/3"
+    private val baseUrl: String = "https://api.tvmaze.com"
 ) {
-    suspend fun getPopularMovies(): List<MovieDto> =
-        httpClient.get("$baseUrl/movie/popular").body<MoviesResponseDto>().results
+    suspend fun getShows(): List<ShowDto> = httpClient.get("$baseUrl/shows").body()
+
+    suspend fun getShow(id: Int): ShowDto = httpClient.get("$baseUrl/shows/$id").body()
 }

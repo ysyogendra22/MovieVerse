@@ -21,13 +21,16 @@ fun MovieVerseApp() {
                 when (route) {
                     is MovieRoute.List -> NavEntry(route) {
                         MovieListScreen(
-                            onMovieClick = { movie -> backStack.add(MovieRoute.Detail(movie)) }
+                            onMovieClick = { movieId, movieTitle ->
+                                backStack.add(MovieRoute.Detail(movieId, movieTitle))
+                            }
                         )
                     }
 
                     is MovieRoute.Detail -> NavEntry(route) {
                         MovieDetailScreen(
-                            movie = route.movie,
+                            movieId = route.movieId,
+                            movieTitle = route.movieTitle,
                             onBack = { backStack.removeLastOrNull() }
                         )
                     }
