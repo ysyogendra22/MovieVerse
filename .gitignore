@@ -1,0 +1,26 @@
+# Gradle / Kotlin
+.gradle/
+build/
+*/build/
+local.properties
+.kotlin/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.cxx/
+
+# Xcode
+iosApp/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Kotlin/Native framework output consumed by Xcode
+shared/build/xcode-frameworks/
+
+# macOS
+.DS_Store
