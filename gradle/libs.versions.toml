@@ -26,11 +26,18 @@ compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview"
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 
-# Networking (Ktor) — commonMain uses ktor-client-mock by default (see shared/di/NetworkModule.kt)
+# Networking (Ktor) — real per-platform engines; commonMain declares HttpClient() with
+# no explicit engine and each platform's engine artifact is auto-detected (see
+# shared/di/NetworkModule.kt).
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
-ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+# Test-only — exercises MovieRepositoryImpl's exception handling without a real call.
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 
 # Dependency injection (Koin) — BOM-managed, versionless below
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin-bom" }

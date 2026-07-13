@@ -37,7 +37,6 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
 
             implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.mock)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
 
@@ -49,12 +48,18 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            // Test-only: production code has no mock engine (see NetworkModule.kt) —
+            // this exercises MovieRepositoryImpl's exception handling in isolation.
+            implementation(libs.ktor.client.mock)
         }
         androidMain.dependencies {
-            // Android-specific dependencies go here
+            // HttpClient() with no explicit engine in commonMain auto-detects
+            // whichever engine is on each platform's classpath.
+            implementation(libs.ktor.client.okhttp)
         }
         iosMain.dependencies {
-            // iOS-specific dependencies go here
+            implementation(libs.ktor.client.darwin)
         }
     }
 }

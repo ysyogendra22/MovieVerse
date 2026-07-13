@@ -1,7 +1,6 @@
 package com.movieverse.android.ui
 
 import androidx.navigation3.runtime.NavKey
-import com.movieverse.shared.domain.model.Movie
 import kotlinx.serialization.Serializable
 
 sealed interface MovieRoute : NavKey {
@@ -9,5 +8,5 @@ sealed interface MovieRoute : NavKey {
     data object List : MovieRoute
 
     @Serializable
-    data class Detail(val movie: Movie) : MovieRoute
+    data class Detail(val movieId: Int, val movieTitle: String) : MovieRoute
 }

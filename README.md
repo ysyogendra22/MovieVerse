@@ -42,11 +42,12 @@ MovieVerse/
 ├── shared/src/commonMain/kotlin/com/movieverse/shared/
 │   ├── domain/
 │   │   ├── model/Movie.kt              domain entity
-│   │   └── repository/MovieRepository.kt   repository interface
+│   │   ├── repository/MovieRepository.kt   repository interface
+│   │   └── error/MovieError.kt         sealed error hierarchy + toUserMessage()
 │   ├── data/
-│   │   ├── remote/    Ktor API client, DTOs, DTO→domain mapper
-│   │   ├── mock/       MockEngine seeding sample data (no real API needed)
-│   │   └── repository/MovieRepositoryImpl.kt
+│   │   ├── remote/    Ktor API client (hits TVMaze), DTOs, DTO→domain mapper
+│   │   └── repository/MovieRepositoryImpl.kt   translates exceptions -> MovieError
+│   ├── presentation/    MovieListUiState / MovieDetailUiState (Loading/Success/Error/Empty)
 │   ├── di/             Koin modules, initKoin(), Injector (Swift entry point)
 │   ├── Platform.kt      expect/actual platform-detection demo
 │   └── Greeting.kt
@@ -77,8 +78,9 @@ MovieVerse/
 - **Android Studio** (Koala or newer) with a JDK 17+ configured (Gradle 9 requires JDK 17+ to run)
 - **Xcode** 15+ (for the iOS app), macOS only
 - No local Gradle/Java install needed — Android Studio provides its own
-- Internet access — movie *data* is fully mocked offline, but poster images load from
-  `picsum.photos` over a real network call (Coil on Android, `AsyncImage` on iOS)
+- Internet access — movie data comes from a live call to TVMaze
+  (`https://api.tvmaze.com`), a free, keyless TV show API used as dummy data (see
+  "How the sharing works" below); there's no offline mode
 
 ## Running the Android app
 
@@ -103,34 +105,48 @@ then rebuild in Xcode.
 
 ## How the sharing works
 
-- **Domain layer** (`shared/domain`): `Movie` model, `MovieRepository` interface — no
+- **Domain layer** (`shared/domain`): `Movie` model, `MovieRepository` interface
+  (`getMovies()`, `getMovieDetail(id)`), `MovieError` sealed error hierarchy — no
   platform or framework dependency.
-- **Data layer** (`shared/data`): `MovieApiClient` (Ktor) + `MovieDto`
-  (`kotlinx.serialization`) + `MovieRepositoryImpl`, which maps DTOs to domain models.
-  The `HttpClient` is wired to a `MockEngine` (`data/mock/MockMovieEngine.kt`) that
-  returns canned JSON — the *entire* Ktor + serialization pipeline runs for real, just
-  without a live network call. **To go live:** point `MovieApiClient`'s `baseUrl` at a
-  real API (e.g. TMDB) and swap `mockMovieEngine()` for a platform engine
-  (`ktor-client-okhttp` / `ktor-client-darwin`) in `di/NetworkModule.kt`.
+- **Data layer** (`shared/data`): `MovieApiClient` (Ktor) hits TVMaze
+  (`GET /shows`, `GET /shows/{id}`); `ShowDto` (`kotlinx.serialization`) matches its
+  real response shape; `MovieRepositoryImpl` maps DTOs to domain models and translates
+  Ktor/serialization exceptions into `MovieError` (its `safeApiCall` helper is the one
+  place that happens — nothing above it needs to know networking is Ktor).
+  `HttpClient` is declared with no explicit engine; `androidMain`/`iosMain` each add
+  their own engine (`ktor-client-okhttp` / `ktor-client-darwin`) and Ktor auto-detects
+  whichever is on the classpath.
+- **Presentation layer** (`shared/presentation`): `MovieListUiState`/`MovieDetailUiState`
+  sealed types (`Loading`/`Success`/`Error`/`Empty`) that both platforms' ViewModels
+  produce from repository calls + caught `MovieError`s.
 - **DI** (`shared/di`): Koin modules (`networkModule`, `repositoryModule`) plus
   `initKoin()`. Android calls it from `MovieVerseApplication` (with `androidContext`);
   iOS calls the Swift-friendly `doInitKoin()` from `iOSApp.swift`'s `init()`.
 - **Platform code**: `Platform.kt` declares an `expect class Platform` — each platform
   supplies its own `actual` (`Platform.android.kt`, `Platform.ios.kt`).
 - **Android** injects dependencies with `koinViewModel()` in Compose
-  (`ui/MovieListViewModel.kt` takes `MovieRepository` as a constructor param).
+  (`ui/MovieListViewModel.kt`/`MovieDetailViewModel.kt` take `MovieRepository` as a
+  constructor param; the detail one also takes a `movieId` via Koin's parameter DSL).
 - **iOS** can't use Compose's Koin integration, so it goes through
   `Injector.shared.movieRepository()` (`di/Injector.kt`) instead. Kotlin `suspend`
-  functions appear in Swift as completion-handler callbacks (see
-  `MovieListViewModel.swift`).
+  functions appear in Swift as completion-handler callbacks. iOS mirrors
+  `MovieListUiState`/`MovieDetailUiState` as native Swift `enum`s in each ViewModel
+  file rather than switching on the Kotlin sealed type directly.
+- **Error messages**: `MovieError.toUserMessage()` (in `shared`) is called by both
+  platforms directly, so wording can't drift between them — see
+  `.ai/decisions.md` #13.
 - **Navigation**: Android uses Navigation3 (`ui/MovieRoute.kt`, `ui/MovieVerseApp.kt`)
-  with a list → detail back stack; iOS uses SwiftUI's native `NavigationStack` +
-  `navigationDestination(for:)`, keyed by the movie's `id` rather than the Kotlin
-  `Movie` object (Kotlin-exported classes aren't guaranteed `Hashable` in Swift).
+  with a list → detail back stack, keyed by `movieId`; iOS uses SwiftUI's native
+  `NavigationStack` + `navigationDestination(for:)`, keyed by the movie's `id` rather
+  than the Kotlin `Movie` object (Kotlin-exported classes aren't guaranteed `Hashable`
+  in Swift). Both platforms fetch the detail screen's data fresh by id rather than
+  reusing the already-loaded list item.
 
 ## Extending this starter
 
-- **Go live**: see "How the sharing works" above — swap the mock engine for a real one.
+- **Swap to a real movie catalog**: TVMaze is a TV show API used as dummy data (see
+  `.ai/decisions.md` #11) — change `MovieApiClient`'s `baseUrl`, `ShowDto`'s fields,
+  and `MovieMapper.kt`'s mapping to point at an actual movie API (e.g. TMDB).
 - **Add local storage**: introduce Room (once it settles) or SQLDelight behind the
   existing `MovieRepository` interface — `MovieRepositoryImpl` is the natural place to
   merge remote + cached data (repository pattern).

@@ -4,4 +4,5 @@ import com.movieverse.shared.domain.model.Movie
 
 interface MovieRepository {
     suspend fun getMovies(): List<Movie>
+    suspend fun getMovieDetail(id: Int): Movie
 }

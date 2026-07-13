@@ -1,38 +1,65 @@
 import SwiftUI
 import shared
 
+// Navigating by (id, title) — not the Kotlin Movie object itself, since Kotlin-exported
+// classes aren't guaranteed Hashable — lets the detail screen show the title
+// immediately while it fetches full details by id, instead of a bare back arrow.
+private struct MovieDetailArgs: Hashable {
+    let id: Int32
+    let title: String
+}
+
 struct ContentView: View {
     @StateObject private var viewModel = MovieListViewModel()
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(viewModel.greeting)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding()
-
-                if viewModel.isLoading {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                } else {
-                    List(viewModel.movies, id: \.id) { movie in
-                        NavigationLink(value: movie.id) {
-                            MovieRow(movie: movie)
-                        }
-                    }
-                    .listStyle(.plain)
+            content
+                .navigationTitle("MovieVerse")
+                .navigationDestination(for: MovieDetailArgs.self) { args in
+                    MovieDetailView(movieId: args.id, movieTitle: args.title)
                 }
-            }
-            .navigationTitle("MovieVerse")
-            .navigationDestination(for: Int32.self) { movieId in
-                if let movie = viewModel.movies.first(where: { $0.id == movieId }) {
-                    MovieDetailView(movie: movie)
-                }
-            }
         }
         .onAppear { viewModel.load() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.uiState {
+        case .loading:
+            ProgressView()
+
+        case .empty:
+            MessageView(message: "No movies found.", onRetry: nil)
+
+        case .error(let message):
+            MessageView(message: message, onRetry: { viewModel.load() })
+
+        case .success(let movies):
+            List(movies, id: \.id) { movie in
+                NavigationLink(value: MovieDetailArgs(id: movie.id, title: movie.title)) {
+                    MovieRow(movie: movie)
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+}
+
+private struct MessageView: View {
+    let message: String
+    let onRetry: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            if let onRetry {
+                Button("Retry", action: onRetry)
+            }
+        }
+        .padding()
     }
 }
 
@@ -52,6 +79,9 @@ private struct MovieRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(movie.title)
                     .font(.headline)
+                Text(movie.releaseDate.toReadableDate())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(movie.overview)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

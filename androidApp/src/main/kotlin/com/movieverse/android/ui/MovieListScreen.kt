@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,13 +30,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.movieverse.shared.domain.error.toUserMessage
 import com.movieverse.shared.domain.model.Movie
+import com.movieverse.shared.presentation.MovieListUiState
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MovieListScreen(
-    onMovieClick: (Movie) -> Unit,
+    onMovieClick: (Int, String) -> Unit,
     viewModel: MovieListViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -43,33 +46,50 @@ fun MovieListScreen(
     Scaffold(
         topBar = { TopAppBar(title = { Text("MovieVerse") }) }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            Text(
-                text = uiState.greeting,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(16.dp)
-            )
-
-            if (uiState.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                MovieList(movies = uiState.movies, onMovieClick = onMovieClick)
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            when (val state = uiState) {
+                is MovieListUiState.Loading -> LoadingState()
+                is MovieListUiState.Empty -> MessageState("No movies found.")
+                is MovieListUiState.Error -> MessageState(
+                    message = state.error.toUserMessage(),
+                    onRetry = viewModel::load
+                )
+                is MovieListUiState.Success -> MovieList(movies = state.movies, onMovieClick = onMovieClick)
             }
         }
     }
 }
 
 @Composable
-private fun MovieList(movies: List<Movie>, onMovieClick: (Movie) -> Unit) {
+private fun LoadingState() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun MessageState(message: String, onRetry: (() -> Unit)? = null) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = message, style = MaterialTheme.typography.bodyLarge)
+            if (onRetry != null) {
+                Button(onClick = onRetry, modifier = Modifier.padding(top = 16.dp)) {
+                    Text("Retry")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MovieList(movies: List<Movie>, onMovieClick: (Int, String) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(16.dp)
     ) {
         items(movies) { movie ->
-            MovieCard(movie, onClick = { onMovieClick(movie) })
+            MovieCard(movie, onClick = { onMovieClick(movie.id, movie.title) })
         }
     }
 }
@@ -88,6 +108,7 @@ private fun MovieCard(movie: Movie, onClick: () -> Unit) {
             )
             Column(modifier = Modifier.padding(start = 12.dp)) {
                 Text(text = movie.title, style = MaterialTheme.typography.titleMedium)
+                Text(text = movie.releaseDate.toReadableDate(), style = MaterialTheme.typography.labelMedium)
                 Text(text = movie.overview, style = MaterialTheme.typography.bodySmall, maxLines = 3)
                 Text(text = "★ ${movie.rating}", style = MaterialTheme.typography.labelMedium)
             }
