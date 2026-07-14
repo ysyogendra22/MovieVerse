@@ -1,88 +1,147 @@
-# MovieVerse — Kotlin Multiplatform Starter
+# MovieVerse — Kotlin Multiplatform Reference App
 
-A production-track starting point for a Kotlin Multiplatform (KMP) app with:
+A production-track Kotlin Multiplatform (KMP) app: one Kotlin `shared` module driving
+two fully native apps — Jetpack Compose on Android, SwiftUI on iOS. Built as a
+reference implementation of a real-world KMP architecture (Clean-ish layering, MVVM,
+Repository pattern, DI, real networking, typed error handling), not a toy demo.
 
-- **`shared/`** — Kotlin business logic used by both apps: domain models, repository
-  interfaces/implementations, networking, DI, `expect`/`actual` platform code
-- **`androidApp/`** — native Android app (Jetpack Compose + Material 3)
-- **`iosApp/`** — native iOS app (SwiftUI)
+Both apps show the same flow: browse a movie list → open a movie's detail — backed by
+a live network call to a real (if not movie-specific — see [Data source](#data-source))
+API, with full loading/success/error/empty state handling on both platforms.
 
-Both apps show a movie list → movie detail flow backed by the same shared repository,
-to demonstrate the architecture end to end.
+## Contents
 
-## Stack
+- [Features](#features)
+- [Tech stack](#tech-stack)
+- [Architecture](#architecture)
+- [Project structure](#project-structure)
+- [Getting started](#getting-started)
+- [Testing](#testing)
+- [CI/CD](#cicd)
+- [Error handling](#error-handling)
+- [Data source](#data-source)
+- [Extending this starter](#extending-this-starter)
+- [Documentation map](#documentation-map)
+- [Known limitations](#known-limitations)
+
+## Features
+
+- Movie list: poster, title, rating, release date, overview snippet
+- Movie detail: full poster, overview, genres, rating, human-readable release date —
+  fetched fresh by id (`GET /shows/{id}`), not reused from the already-loaded list
+- List → detail navigation with the title shown immediately (not after the detail
+  fetch completes) — Navigation3 on Android, `NavigationStack` on iOS
+- Full UI state handling on every screen: loading spinner, success, typed error with
+  Retry, and an explicit empty state — not just an `isLoading` boolean
+- Real network calls (TVMaze), no mocked data in production code
+
+## Tech stack
 
 | Concern | Choice |
 |---|---|
 | Multiplatform | Kotlin Multiplatform (Gradle 9.6.1, AGP 9.2.0, Kotlin 2.4.0) |
 | Android UI | Jetpack Compose, Material 3 |
 | iOS UI | SwiftUI |
-| Dependency injection | Koin |
-| Networking | Ktor Client + kotlinx.serialization |
-| Local storage | *(skipped — see below)* |
+| Dependency injection | Koin 4.1.1 |
+| Networking | Ktor Client 3.4.0 + kotlinx.serialization 1.11.0 |
+| Local storage | *(deliberately skipped — see [Extending this starter](#extending-this-starter))* |
 | Navigation | Navigation3 (Android) / native `NavigationStack` (iOS) |
 | Image loading | Coil 3 (Android) / native `AsyncImage` (iOS) |
 | Concurrency | Kotlin Coroutines, `Flow`, `StateFlow` |
-| Architecture | Clean-ish layering (domain/data/di) + MVVM + Repository pattern |
+| Architecture | Clean-ish layering (domain/data/di/presentation) + MVVM + Repository pattern |
+| Testing | `kotlin.test` + `kotlinx-coroutines-test` (`shared`), + JUnit4 (`androidApp`) |
+| CI/CD | GitHub Actions — release notes on merge to `main` |
 | Build | Gradle Kotlin DSL |
 
-**Room and Voyager were deliberately left out:**
-- **Room 3.0** (the new KMP-first rewrite) shipped only days before this was written —
-  too fresh to build a starter on. The repository is remote-only for now; add Room as
-  a local cache in `data/` behind the existing `MovieRepository` interface once it has
-  more mileage, or once you actually need offline support.
-- **Voyager** assumes a single shared Compose UI. This starter keeps UI fully native per
-  platform (Compose on Android, SwiftUI on iOS), so **Navigation3** (Android-only) fits
-  better than a cross-platform nav library; iOS just uses `NavigationStack` natively.
+**Room and Voyager were deliberately left out** — see
+[`.ai/decisions.md`](.ai/decisions.md) #4 and #5 for the full reasoning:
+- **Room 3.0** (the KMP-first rewrite) shipped only days before this was written — too
+  fresh to build a starter on. Add it behind `MovieRepositoryImpl` once it has mileage.
+- **Voyager** assumes one shared Compose UI across platforms; this project keeps UI
+  fully native per platform, so it doesn't fit — Navigation3 + native `NavigationStack`
+  was the natural pairing instead.
 
-## Project layout
+## Architecture
+
+```
+UI (Compose / SwiftUI)
+  → ViewModel (platform-specific: catches MovieError, maps to UiState)
+    → MovieRepository (domain interface)
+      → MovieRepositoryImpl (translates exceptions → MovieError)
+        → MovieApiClient (Ktor)
+          → HttpClient (OkHttp on Android / Darwin on iOS) → https://api.tvmaze.com
+```
+
+- **Domain layer** (`shared/domain`) — `Movie` model, `MovieRepository` interface,
+  `MovieError` sealed error hierarchy. Zero platform or framework dependency.
+- **Data layer** (`shared/data`) — `MovieApiClient` (Ktor), `ShowDto`
+  (`kotlinx.serialization`, matches TVMaze's real shape), `MovieRepositoryImpl`. Its
+  `safeApiCall` helper is the *single* place Ktor/serialization exceptions get
+  translated into `MovieError` — nothing above it needs to know networking is Ktor.
+- **Presentation layer** (`shared/presentation`) — `MovieListUiState` /
+  `MovieDetailUiState` sealed types (`Loading` / `Success` / `Error` / `Empty`) that
+  both platforms' ViewModels produce.
+- **DI** (`shared/di`) — Koin modules + `initKoin()`. Android calls it from
+  `MovieVerseApplication`; iOS calls the Swift-friendly `doInitKoin()` wrapper from
+  `iOSApp.swift`'s `init()`.
+- **Android** injects via `koinViewModel()` in Compose. **iOS** can't use Compose's
+  Koin integration, so it goes through `Injector.shared.movieRepository()` instead,
+  and mirrors the shared `UiState` shape as a native Swift `enum` per ViewModel rather
+  than switching on the Kotlin sealed type directly (see
+  [`.ai/decisions.md`](.ai/decisions.md) #14).
+- **Error messages** — `MovieError.toUserMessage()`, defined once in `shared`, called
+  directly by both platforms so wording can't drift between them.
+
+Full detail, including every non-obvious interop decision (Swift `Hashable`, Kotlin
+default parameters, sealed-class export) and the reasoning behind each, lives in
+[`.ai/architecture_summary.md`](.ai/architecture_summary.md) and
+[`.ai/decisions.md`](.ai/decisions.md) — this README is the overview, those are the
+full record.
+
+## Project structure
 
 ```
 MovieVerse/
-├── shared/src/commonMain/kotlin/com/movieverse/shared/
-│   ├── domain/
-│   │   ├── model/Movie.kt              domain entity
-│   │   ├── repository/MovieRepository.kt   repository interface
-│   │   └── error/MovieError.kt         sealed error hierarchy + toUserMessage()
-│   ├── data/
-│   │   ├── remote/    Ktor API client (hits TVMaze), DTOs, DTO→domain mapper
-│   │   └── repository/MovieRepositoryImpl.kt   translates exceptions -> MovieError
-│   ├── presentation/    MovieListUiState / MovieDetailUiState (Loading/Success/Error/Empty)
-│   ├── di/             Koin modules, initKoin(), Injector (Swift entry point)
-│   ├── Platform.kt      expect/actual platform-detection demo
-│   └── Greeting.kt
-├── shared/src/androidMain, iosMain/   platform `actual` implementations
-├── androidApp/          Android app (Compose, Navigation3, Koin, Coil)
-├── iosApp/              iOS app (SwiftUI) + Xcode project
-└── settings.gradle.kts  Gradle module wiring
+├── shared/src/
+│   ├── commonMain/kotlin/com/movieverse/shared/
+│   │   ├── domain/
+│   │   │   ├── model/Movie.kt
+│   │   │   ├── repository/MovieRepository.kt
+│   │   │   └── error/MovieError.kt          sealed error hierarchy + toUserMessage()
+│   │   ├── data/
+│   │   │   ├── remote/                      MovieApiClient, ShowDto, MovieMapper
+│   │   │   └── repository/MovieRepositoryImpl.kt
+│   │   ├── presentation/                    MovieListUiState, MovieDetailUiState
+│   │   ├── di/                              Koin modules, initKoin(), Injector
+│   │   ├── Platform.kt / Greeting.kt         expect/actual demo
+│   ├── androidMain/, iosMain/                platform `actual` implementations
+│   └── commonTest/                           mapper + repository tests
+├── androidApp/src/
+│   ├── main/kotlin/com/movieverse/android/
+│   │   ├── MainActivity.kt, MovieVerseApplication.kt
+│   │   ├── di/AndroidModule.kt
+│   │   └── ui/                              Screens, ViewModels, MovieRoute, DateFormat
+│   └── test/                                 ViewModel tests + FakeMovieRepository
+├── iosApp/
+│   ├── iosApp.xcodeproj/                    hand-maintained project.pbxproj
+│   └── iosApp/                              Views, ViewModels, DateFormatting
+├── .github/workflows/                        release-on-merge.yml
+├── .ai/                                      architecture docs, decisions, AI-assistant rules
+├── docs/                                     product docs (vision, PRD, roadmap-adjacent)
+└── settings.gradle.kts                       Gradle module wiring
 ```
 
-## Toolchain versions
+## Getting started
 
-- Gradle 9.6.1, Android Gradle Plugin 9.2.0, Kotlin 2.4.0
-- `compileSdk`/`targetSdk` 36+ (Android 16)
-- `shared` combines `com.android.library` with `org.jetbrains.kotlin.multiplatform`,
-  which AGP 9.0+ refuses to apply unless you migrate to the new
-  `com.android.kotlin.multiplatform.library` plugin. That plugin's DSL is still
-  changing shape across AGP 9.x releases, so `gradle.properties` sets
-  `android.builtInKotlin=false` and `android.newDsl=false` as a **temporary bypass**
-  back to AGP's pre-9.0 Kotlin handling — this is project-wide, which is why
-  `androidApp` also applies the classic `org.jetbrains.kotlin.android` plugin again
-  instead of relying on AGP 9's built-in Kotlin support.
-- Migrate `shared` to `com.android.kotlin.multiplatform.library` before AGP 10
-  (H2 2026) removes the classic combo entirely, then these bypass flags and the
-  explicit `kotlin-android` plugin on `androidApp` can come back out.
+### Prerequisites
 
-## Prerequisites
-
-- **Android Studio** (Koala or newer) with a JDK 17+ configured (Gradle 9 requires JDK 17+ to run)
+- **Android Studio** (Koala or newer) with a JDK 17+ configured (Gradle 9 requires
+  JDK 17+ to run)
 - **Xcode** 15+ (for the iOS app), macOS only
 - No local Gradle/Java install needed — Android Studio provides its own
-- Internet access — movie data comes from a live call to TVMaze
-  (`https://api.tvmaze.com`), a free, keyless TV show API used as dummy data (see
-  "How the sharing works" below); there's no offline mode
+- Internet access — movie data is a live call to TVMaze, no offline mode
 
-## Running the Android app
+### Run the Android app
 
 1. Open the root `MovieVerse/` folder in Android Studio.
 2. Let Gradle sync (first sync downloads dependencies — may take a few minutes).
@@ -90,7 +149,7 @@ MovieVerse/
      **File ▸ Sync Project with Gradle Files** — Android Studio will regenerate it.
 3. Select the `androidApp` run configuration and press Run.
 
-## Running the iOS app
+### Run the iOS app
 
 1. Open `iosApp/iosApp.xcodeproj` in Xcode.
 2. Select a simulator and press Run.
@@ -103,62 +162,107 @@ If Xcode can't find the `shared` module, do one Gradle build first from the term
 `./gradlew :shared:embedAndSignAppleFrameworkForXcode` (requires a JDK on your PATH),
 then rebuild in Xcode.
 
-## How the sharing works
+## Testing
 
-- **Domain layer** (`shared/domain`): `Movie` model, `MovieRepository` interface
-  (`getMovies()`, `getMovieDetail(id)`), `MovieError` sealed error hierarchy — no
-  platform or framework dependency.
-- **Data layer** (`shared/data`): `MovieApiClient` (Ktor) hits TVMaze
-  (`GET /shows`, `GET /shows/{id}`); `ShowDto` (`kotlinx.serialization`) matches its
-  real response shape; `MovieRepositoryImpl` maps DTOs to domain models and translates
-  Ktor/serialization exceptions into `MovieError` (its `safeApiCall` helper is the one
-  place that happens — nothing above it needs to know networking is Ktor).
-  `HttpClient` is declared with no explicit engine; `androidMain`/`iosMain` each add
-  their own engine (`ktor-client-okhttp` / `ktor-client-darwin`) and Ktor auto-detects
-  whichever is on the classpath.
-- **Presentation layer** (`shared/presentation`): `MovieListUiState`/`MovieDetailUiState`
-  sealed types (`Loading`/`Success`/`Error`/`Empty`) that both platforms' ViewModels
-  produce from repository calls + caught `MovieError`s.
-- **DI** (`shared/di`): Koin modules (`networkModule`, `repositoryModule`) plus
-  `initKoin()`. Android calls it from `MovieVerseApplication` (with `androidContext`);
-  iOS calls the Swift-friendly `doInitKoin()` from `iOSApp.swift`'s `init()`.
-- **Platform code**: `Platform.kt` declares an `expect class Platform` — each platform
-  supplies its own `actual` (`Platform.android.kt`, `Platform.ios.kt`).
-- **Android** injects dependencies with `koinViewModel()` in Compose
-  (`ui/MovieListViewModel.kt`/`MovieDetailViewModel.kt` take `MovieRepository` as a
-  constructor param; the detail one also takes a `movieId` via Koin's parameter DSL).
-- **iOS** can't use Compose's Koin integration, so it goes through
-  `Injector.shared.movieRepository()` (`di/Injector.kt`) instead. Kotlin `suspend`
-  functions appear in Swift as completion-handler callbacks. iOS mirrors
-  `MovieListUiState`/`MovieDetailUiState` as native Swift `enum`s in each ViewModel
-  file rather than switching on the Kotlin sealed type directly.
-- **Error messages**: `MovieError.toUserMessage()` (in `shared`) is called by both
-  platforms directly, so wording can't drift between them — see
-  `.ai/decisions.md` #13.
-- **Navigation**: Android uses Navigation3 (`ui/MovieRoute.kt`, `ui/MovieVerseApp.kt`)
-  with a list → detail back stack, keyed by `movieId`; iOS uses SwiftUI's native
-  `NavigationStack` + `navigationDestination(for:)`, keyed by the movie's `id` rather
-  than the Kotlin `Movie` object (Kotlin-exported classes aren't guaranteed `Hashable`
-  in Swift). Both platforms fetch the detail screen's data fresh by id rather than
-  reusing the already-loaded list item.
+| Layer | Location | Covers |
+|---|---|---|
+| Mapper | `shared/src/commonTest/.../MovieMapperTest.kt` | HTML-stripping, entity-unescaping, null fallbacks |
+| Repository | `shared/src/commonTest/.../MovieRepositoryImplTest.kt` | `safeApiCall`'s exception→`MovieError` translation, against a `ktor-client-mock` `MockEngine` (test-only dependency — production has no mock engine) |
+| ViewModels | `androidApp/src/test/.../MovieListViewModelTest.kt`, `MovieDetailViewModelTest.kt` | `Loading`/`Success`/`Error`/`Empty` transitions + retry, against a `FakeMovieRepository` test double |
+
+Run with `./gradlew test` (Android/JVM + `shared`'s JVM test target) or via Android
+Studio's test runner.
+
+**Not covered yet**, deliberately (see [`.ai/decisions.md`](.ai/decisions.md) #16):
+- iOS/Swift (XCTest) — no test target exists in `project.pbxproj` yet.
+- `MovieError.Timeout` specifically — reliably triggering Ktor's real timeout plugin
+  in a unit test is timing-dependent; the other four `MovieError` branches are covered.
+
+## CI/CD
+
+[`.github/workflows/release-on-merge.yml`](.github/workflows/release-on-merge.yml)
+publishes a GitHub Release automatically whenever a PR is merged into `main`:
+
+- Tag: `v{date}-{short-sha}` (e.g. `v2026.07.15-a1b2c3d`)
+- Release notes: PR title, number, author, merge commit, and description
+- No secrets to configure — uses the built-in `GITHUB_TOKEN`
+- PR title/body/author are treated as untrusted input and passed through step `env:`
+  vars rather than interpolated directly into the script, to avoid a script-injection
+  hole (a PR titled with a shell command shouldn't be able to execute it)
+
+Doesn't run on PR *open* — only once a PR actually merges, so releases only ever
+reflect real, merged code.
+
+## Error handling
+
+Every network/serialization failure is translated (in `MovieRepositoryImpl.safeApiCall`)
+into one of a fixed set of typed errors, each with its own user-facing message
+(`MovieError.toUserMessage()`, shared by both platforms):
+
+| `MovieError` | Triggered by | 
+|---|---|
+| `NetworkUnavailable` | No connection / DNS failure (`kotlinx.io.IOException`) |
+| `ApiError(code)` | Non-2xx response (`ClientRequestException` / `ServerResponseException`) |
+| `Timeout` | Request or connect timeout |
+| `EmptyResponse` | Malformed/unparseable response body |
+| `Unknown(cause)` | Anything else |
+
+ViewModels catch `MovieError` and map it into a `UiState.Error`, rendered with a Retry
+action on both platforms.
+
+## Data source
+
+Movie data comes from **[TVMaze](https://www.tvmaze.com/api)**
+(`https://api.tvmaze.com`) — a free, keyless **TV show** API used as dummy data, not
+an actual movie catalog (no free movie API without an application/key was available).
+`GET /shows` powers the list, `GET /shows/{id}` powers the detail screen. TVMaze's
+"show" vocabulary is mapped onto this app's "Movie" domain vocabulary in
+`MovieMapper.kt` — see [`.ai/decisions.md`](.ai/decisions.md) #11.
+
+**To swap in a real movie API** (e.g. TMDB): change `MovieApiClient`'s `baseUrl`,
+`ShowDto`'s fields, and `MovieMapper.kt`'s mapping. No architecture change required —
+this is a config/mapping change, contained entirely in `shared/data/remote`.
 
 ## Extending this starter
 
-- **Swap to a real movie catalog**: TVMaze is a TV show API used as dummy data (see
-  `.ai/decisions.md` #11) — change `MovieApiClient`'s `baseUrl`, `ShowDto`'s fields,
-  and `MovieMapper.kt`'s mapping to point at an actual movie API (e.g. TMDB).
-- **Add local storage**: introduce Room (once it settles) or SQLDelight behind the
-  existing `MovieRepository` interface — `MovieRepositoryImpl` is the natural place to
+- **Go live with a real movie catalog** — see [Data source](#data-source) above.
+- **Add local storage** — introduce Room (once it settles) or SQLDelight behind the
+  existing `MovieRepository` interface; `MovieRepositoryImpl` is the natural place to
   merge remote + cached data (repository pattern).
-- **Add more shared logic**: put anything with no UI/platform dependency in
+- **Add more shared logic** — anything with no UI/platform dependency belongs in
   `shared/domain` or `shared/data` (validation, formatting, use cases).
-- **Tests**: add shared logic tests under `shared/src/commonTest` — they run on both
-  platforms' test targets.
+- **Add a feature** — follow [`.ai/prompts/create_feature.md`](.ai/prompts/create_feature.md)'s
+  checklist; it walks through every layer a new feature touches.
+- **Add tests** — see [Testing](#testing) above and
+  [`.ai/prompts/generate_tests.md`](.ai/prompts/generate_tests.md) for the established
+  patterns to reuse.
 
-## Notes
+## Documentation map
 
-- This starter deliberately keeps UI native (Compose on Android, SwiftUI on iOS) rather
-  than using Compose Multiplatform, so each app can fully use platform-native UI/UX
-  while sharing only business logic.
-- Package/bundle IDs: `com.movieverse.android` (Android), `com.movieverse.ios` (iOS),
-  `com.movieverse.shared` (shared module) — rename these before shipping.
+This README is the overview. Deeper documentation lives in:
+
+- **[`.ai/`](.ai/)** — architecture reference for AI-assisted development: `rules.md`
+  (hard constraints), `instructions.md` (process), `coding_style.md`,
+  `architecture_summary.md`, `glossary.md`, `decisions.md` (the full reasoning log
+  behind every non-obvious choice in this project), and `prompts/` (task checklists
+  for common changes).
+- **[`docs/`](docs/)** — product-facing docs (vision, discovery, PRD, feature list,
+  MVP definition). Marked as drafts — grounded in what's actually built, with open
+  product questions flagged rather than answered speculatively.
+
+## Known limitations
+
+- `shared`'s Android target still uses the classic `com.android.library` +
+  `kotlin.multiplatform` combo, which AGP 9.0+ deprecates. Kept alive via
+  `android.builtInKotlin=false` / `android.newDsl=false` in `gradle.properties` — a
+  **temporary bypass**, not a long-term fix. Migrate to
+  `com.android.kotlin.multiplatform.library` before AGP 10 (H2 2026) removes the
+  classic combo entirely — see [`.ai/project_context.md`](.ai/project_context.md).
+- Data source is TVMaze (TV shows), not an actual movie catalog — see
+  [Data source](#data-source).
+- No offline support, no search/filter, no favorites/watchlist — see
+  [`docs/03-Feature-List.md`](docs/03-Feature-List.md) for the full backlog.
+- Error messages are English-only, centralized in `shared` rather than localized per
+  platform.
+- Package/bundle IDs (`com.movieverse.android`, `com.movieverse.ios`,
+  `com.movieverse.shared`) should be renamed before shipping this as a real app.
